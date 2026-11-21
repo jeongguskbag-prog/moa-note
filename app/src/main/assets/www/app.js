@@ -238,7 +238,13 @@ async function importBytes(bytes, name, mime) {
     else if (kind === 'hwp') pages = await hwpPages(bytes, name);
     else pages = [await imagePage(bytes, mime)];
     if (!pages.length) throw new Error('쪽이 없어요');
-    const n = await createNote('blank', { title, kind, pages, source: name });
+    // HWP 는 원본도 같이 보관 → 나중에 "원본 글자 고치기"·"HWP 로 저장"
+    let orig = null;
+    if (kind === 'hwp') {
+      const fmt = (bytes[0] === 0x50 && bytes[1] === 0x4b) || /\.hwpx$/i.test(name || '') ? 'hwpx' : 'hwp';
+      orig = { blob: await putBlob(new Blob([bytes])), name: name || `${title}.${fmt}`, fmt };
+    }
+    const n = await createNote('blank', { title, kind, pages, source: name, orig });
     await saveNote(n, true);
     toast(`${pages.length}쪽을 가져왔어요 · 펜으로 써 보세요`);
     return n;
@@ -459,10 +465,11 @@ async function closeNote() {
 onTap($('back'), closeNote);
 $('noteTitle').addEventListener('input', () => { if (E.note) { E.note.title = $('noteTitle').value; scheduleSave(); } });
 
-function computeScale() {
+function computeFitScale() {
   const maxW = Math.max(...E.note.pages.map((p) => p.w));
   return Math.min(2, Math.max(0.3, ($('pages').clientWidth - 20) / maxW));
 }
+const computeScale = computeFitScale;
 const pageObserver = new IntersectionObserver((entries) => {
   for (const en of entries) {
     const i = +en.target.dataset.i;
@@ -475,6 +482,7 @@ function buildPages() {
   pageObserver.disconnect();
   box.innerHTML = ''; E.els = [];
   E.scale = computeScale();
+  lastW = $('pages').clientWidth;
   E.note.pages.forEach((pg, i) => {
     const el = document.createElement('div');
     el.className = 'page'; el.dataset.i = String(i);
@@ -523,10 +531,14 @@ function redrawInk(i) {
   g.setTransform(k, 0, 0, k, 0, 0);
   for (const s of pg.strokes) drawStroke(g, s);
 }
+// 화면 너비가 바뀔 때(가로·세로 돌리기)만 맞춤 배율로 다시 배치. 키보드가 올라오는 건 무시(확대 상태 유지)
+let lastW = 0;
 window.addEventListener('resize', () => {
   if (!E.note) return;
-  const s = computeScale();
-  if (Math.abs(s - E.scale) > 0.01) { const y = $('pages').scrollTop / E.scale; buildPages(); $('pages').scrollTop = y * E.scale; }
+  const w = $('pages').clientWidth;
+  if (Math.abs(w - lastW) < 2) return;
+  lastW = w;
+  const y = $('pages').scrollTop / E.scale; buildPages(); $('pages').scrollTop = y * E.scale;
 });
 
 // 도구
@@ -587,8 +599,8 @@ function onDown(e) {
   try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 무시 */ }
   E.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, page: i, stroke: null, erased: null });
   if (E.pointers.size >= 2) {
+    // 두 손가락: 그리던 획은 취소 (확대·축소·이동은 아래 손가락 확대 처리가 맡음)
     for (const p of E.pointers.values()) if (p.stroke) { const list = E.note.pages[p.page].strokes; const k = list.indexOf(p.stroke); if (k >= 0) list.splice(k, 1); redrawInk(p.page); p.stroke = null; }
-    E.pan = mid();
     return;
   }
   const p = E.pointers.get(e.pointerId);
@@ -604,7 +616,7 @@ function onMove(e) {
   if (!p) return;
   e.preventDefault();
   p.x = e.clientX; p.y = e.clientY;
-  if (E.pan) { const m = mid(); $('pages').scrollLeft -= m.x - E.pan.x; $('pages').scrollTop -= m.y - E.pan.y; E.pan = m; return; }
+  if (E.pointers.size >= 2 || pinch) return;
   const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
   if (E.tool === 'eraser' && p.erased != null) { for (const ce of events) eraseAt(p.page, pt(ce, e.currentTarget)); return; }
   if (!p.stroke) return;
@@ -625,12 +637,58 @@ function onMove(e) {
 function onUp(e) {
   const p = E.pointers.get(e.pointerId);
   E.pointers.delete(e.pointerId);
-  if (E.pointers.size < 2) E.pan = null;
   if (!p) return;
   if (p.stroke || (p.erased > 0)) scheduleSave();
   else if (p.erased === 0) E.undo.pop(), updateUndo(); // 지운 게 없으면 되돌리기 기록도 뺌
 }
-function mid() { let x = 0, y = 0; for (const p of E.pointers.values()) { x += p.x; y += p.y; } return { x: x / E.pointers.size, y: y / E.pointers.size }; }
+
+// ---------- 두 손가락으로 확대·축소·이동 (모든 도구, S펜만 모드에서도) ----------
+let pinch = null;
+const touchMid = (t) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+const touchDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+$('pages').addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 2 || !E.note) return;
+  const m = touchMid(e.touches);
+  pinch = { d: touchDist(e.touches), s: E.scale, m };
+}, { passive: true });
+$('pages').addEventListener('touchmove', (e) => {
+  if (!pinch || e.touches.length !== 2) return;
+  if (e.cancelable) e.preventDefault();
+  const m = touchMid(e.touches);
+  const fit = computeFitScale();
+  const s = Math.max(fit * 0.6, Math.min(4, pinch.s * touchDist(e.touches) / pinch.d));
+  zoomAt(s, m.x, m.y, m.x - pinch.m.x, m.y - pinch.m.y);
+  pinch.m = m;
+}, { passive: false });
+const endPinch = (e) => {
+  if (!pinch || e.touches.length >= 2) return;
+  pinch = null;
+  // 확대가 끝나면 보이는 쪽을 새 배율로 선명하게 다시 그림
+  E.els.forEach((pe, i) => { if (pe.drawn) drawPageEl(i); });
+};
+$('pages').addEventListener('touchend', endPinch);
+$('pages').addEventListener('touchcancel', endPinch);
+
+/** 배율을 s 로 바꾸되 손가락 사이(ax, ay) 아래 내용이 그 자리에 머물게. (dx, dy) 만큼 함께 옮김 */
+function zoomAt(s, ax, ay, dx = 0, dy = 0) {
+  const box = $('pages'), r = box.getBoundingClientRect();
+  const old = E.scale;
+  const cx = box.scrollLeft + ax - r.left, cy = box.scrollTop + ay - r.top;
+  applyScale(s);
+  const k = s / old;
+  box.scrollLeft = cx * k - (ax - r.left) - dx;
+  box.scrollTop = cy * k - (ay - r.top) - dy;
+}
+/** 쪽 상자·글자 상자 크기만 바꿈 (그림은 CSS 로 늘어나 보이고, 손을 떼면 다시 그림) */
+function applyScale(s) {
+  E.scale = s;
+  E.note.pages.forEach((pg, i) => {
+    const pe = E.els[i];
+    if (!pe) return;
+    pe.el.style.width = `${pg.w * s}px`; pe.el.style.height = `${pg.h * s}px`;
+    for (const el of pe.el.querySelectorAll('.tbox')) { const t = pg.texts.find((x) => x.id === el.dataset.id); if (t) placeTextEl(el, t, i); }
+  });
+}
 function eraseAt(i, [x, y]) {
   const pg = E.note.pages[i], r = E.style.eraser.width;
   const before = pg.strokes.length;
@@ -758,6 +816,7 @@ function openNoteMenu(n) {
   if (!n) return;
   menuNote = n;
   $('noteMenuTitle').textContent = n.title || '노트';
+  for (const b of $('noteMenu').querySelectorAll('.hwpOnly')) b.hidden = !n.orig;
   $('noteMenu').hidden = false;
 }
 onTap($('noteMenuBtn'), async () => { await flushSave(); openNoteMenu(E.note); });
@@ -769,6 +828,8 @@ onTap($('noteMenu'), async (e) => {
   sheet.hidden = true;
   const n = menuNote;
   switch (b.dataset.c) {
+    case 'editHwp': openHwpEditor(n); break;
+    case 'saveHwp': saveHwp(n); break;
     case 'share': exportPdf(n, 'share'); break;
     case 'savePdf': exportPdf(n, 'save'); break;
     case 'addPage': addPage(); break;
@@ -791,6 +852,7 @@ onTap($('noteMenu'), async (e) => {
       if (!ok) return;
       for (const p of n.pages) if (p.bg.blob) await dbDel('blobs', p.bg.blob);
       if (n.thumb) await dbDel('blobs', n.thumb);
+      if (n.orig) await dbDel('blobs', n.orig.blob);
       await dbDel('notes', n.id);
       H.notes = H.notes.filter((x) => x.id !== n.id);
       if (E.note && E.note.id === n.id) { E.note = null; E.saveTimer && clearTimeout(E.saveTimer); E.saveTimer = 0; await closeNote(); }
@@ -876,6 +938,92 @@ async function exportPdf(n, target) {
   toast(`PDF 를 만들었어요: ${name}`);
 }
 
+// ---------- HWP 원본 글자 고치기 (HWP 편집기를 화면 위에 띄움: hwp/index.html?embed=1) ----------
+const HW = { frame: null, note: null, applying: null };
+const HWP_MIME = { hwp: 'application/x-hwp', hwpx: 'application/hwp+zip' };
+async function delBlob(id) {
+  if (!id) return;
+  await dbDel('blobs', id);
+  const ce = blobCache.get(id);
+  if (ce) { URL.revokeObjectURL(ce.url); blobCache.delete(id); }
+}
+async function openHwpEditor(n) {
+  if (!n || !n.orig || HW.frame) return;
+  if (E.note && E.note.id === n.id) await flushSave();
+  HW.note = n;
+  const f = document.createElement('iframe');
+  f.id = 'hwpFrame'; f.title = 'HWP 원본 글자 고치기';
+  f.src = 'hwp/index.html?embed=1&engine=../engine/';
+  document.body.appendChild(f);
+  HW.frame = f;
+  toast('고친 뒤 💾 를 누르면 노트에 반영돼요 · 펜 필기는 그대로 남아요', 4000);
+}
+function closeHwpEditor() {
+  if (!HW.frame) return;
+  HW.frame.remove();
+  HW.frame = null; HW.note = null;
+}
+window.addEventListener('message', async (e) => {
+  if (!HW.frame || e.source !== HW.frame.contentWindow || e.origin !== location.origin || !e.data) return;
+  const n = HW.note;
+  if (e.data.type === 'hwp-ready') {
+    const blob = (await dbGet('blobs', n.orig.blob))?.blob;
+    if (!blob) { toast('원본 HWP 를 찾지 못했어요', 4000); closeHwpEditor(); return; }
+    const buf = await blob.arrayBuffer();
+    HW.frame.contentWindow.postMessage({ type: 'hwp-open', bytes: buf, name: n.orig.name }, location.origin, [buf]);
+  } else if (e.data.type === 'hwp-saved') {
+    HW.applying = applyHwpEdit(n, new Uint8Array(e.data.bytes), e.data.fmt).finally(() => { HW.applying = null; });
+  } else if (e.data.type === 'hwp-close') {
+    closeHwpEditor();
+  }
+});
+/** 고친 HWP 로 쪽 그림을 새로 만들고, 같은 쪽 번호의 필기(펜·형광펜·글자)는 그대로 둠 */
+async function applyHwpEdit(n, bytes, fmt) {
+  let fresh;
+  try { fresh = await hwpPages(bytes, n.title || '문서'); }
+  catch (e) { busy(false); toast(`반영하지 못했어요: ${String(e.message || e)}`, 5000); return; }
+  busy(true, '노트에 반영하는 중…');
+  try {
+    const old = n.pages, pages = [];
+    const oldBg = [];
+    fresh.forEach((np, i) => {
+      const op = old[i];
+      if (op) { if (op.bg.blob) oldBg.push(op.bg.blob); pages.push({ ...op, w: np.w, h: np.h, bg: np.bg }); }
+      else pages.push(np);
+    });
+    let kept = 0;
+    for (let i = fresh.length; i < old.length; i++) {
+      const op = old[i];
+      if (op.strokes.length || op.texts.length || op.bg.t !== 'img') { pages.push(op); kept++; }
+      else if (op.bg.blob) oldBg.push(op.bg.blob);
+    }
+    const oldOrig = n.orig.blob;
+    n.orig = { ...n.orig, blob: await putBlob(new Blob([bytes])), fmt: fmt || n.orig.fmt };
+    n.pages = pages;
+    await saveNote(n, true);
+    for (const id of [...oldBg, oldOrig]) await delBlob(id);
+    if (E.note && E.note.id === n.id) { E.note = n; E.undo = []; E.redo = []; updateUndo(); buildPages(); }
+    toast(kept ? `반영했어요 · 문서가 짧아져서 필기가 있는 뒤쪽 ${kept}쪽은 그대로 두었어요` : `반영했어요 (${fresh.length}쪽)`, 4000);
+  } catch (e) {
+    toast(`반영하지 못했어요: ${String(e.message || e)}`, 5000);
+  } finally { busy(false); }
+}
+async function saveHwp(n) {
+  if (!n || !n.orig) return;
+  if (HW.applying) await HW.applying;
+  const blob = (await dbGet('blobs', n.orig.blob))?.blob;
+  if (!blob) { toast('원본 HWP 를 찾지 못했어요', 4000); return; }
+  const fmt = n.orig.fmt || 'hwp';
+  const name = `${(n.title || '문서').replace(/[\\/:*?"<>|]/g, '_')}.${fmt}`;
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (host) { host.saveFile(bytesToBase64(bytes), name, HWP_MIME[fmt]); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes], { type: HWP_MIME[fmt] }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(`저장했어요: ${name}`);
+}
+
 // ---------- 앱 정보 ----------
 $('infoBtn').onclick = () => { $('docText').hidden = true; $('infoSheet').hidden = false; };
 $('infoSheet').addEventListener('click', async (e) => {
@@ -912,6 +1060,7 @@ window.moaApp = {
   },
   /** 뒤로가기: 열린 창 → 편집 화면 → 앱 닫기 */
   handleBack() {
+    if (HW.frame) { const app = HW.frame.contentWindow.hwpApp; if (app && app.ready) app.handleBack(); else closeHwpEditor(); return; }
     for (const id of ['askSheet', 'noteMenu', 'newSheet', 'infoSheet']) if (!$(id).hidden) { if (id === 'askSheet') $(id).click(); else $(id).hidden = true; return; }
     if (E.note) { closeNote(); return; }
     if (H.query) { $('search').value = ''; H.query = ''; renderGrid(); return; }
