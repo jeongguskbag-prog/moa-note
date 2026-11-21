@@ -238,7 +238,13 @@ async function importBytes(bytes, name, mime) {
     else if (kind === 'hwp') pages = await hwpPages(bytes, name);
     else pages = [await imagePage(bytes, mime)];
     if (!pages.length) throw new Error('쪽이 없어요');
-    const n = await createNote('blank', { title, kind, pages, source: name });
+    // HWP 는 원본도 같이 보관 → 나중에 "원본 글자 고치기"·"HWP 로 저장"
+    let orig = null;
+    if (kind === 'hwp') {
+      const fmt = (bytes[0] === 0x50 && bytes[1] === 0x4b) || /\.hwpx$/i.test(name || '') ? 'hwpx' : 'hwp';
+      orig = { blob: await putBlob(new Blob([bytes])), name: name || `${title}.${fmt}`, fmt };
+    }
+    const n = await createNote('blank', { title, kind, pages, source: name, orig });
     await saveNote(n, true);
     toast(`${pages.length}쪽을 가져왔어요 · 펜으로 써 보세요`);
     return n;
@@ -810,6 +816,7 @@ function openNoteMenu(n) {
   if (!n) return;
   menuNote = n;
   $('noteMenuTitle').textContent = n.title || '노트';
+  for (const b of $('noteMenu').querySelectorAll('.hwpOnly')) b.hidden = !n.orig;
   $('noteMenu').hidden = false;
 }
 onTap($('noteMenuBtn'), async () => { await flushSave(); openNoteMenu(E.note); });
@@ -821,6 +828,8 @@ onTap($('noteMenu'), async (e) => {
   sheet.hidden = true;
   const n = menuNote;
   switch (b.dataset.c) {
+    case 'editHwp': openHwpEditor(n); break;
+    case 'saveHwp': saveHwp(n); break;
     case 'share': exportPdf(n, 'share'); break;
     case 'savePdf': exportPdf(n, 'save'); break;
     case 'addPage': addPage(); break;
@@ -843,6 +852,7 @@ onTap($('noteMenu'), async (e) => {
       if (!ok) return;
       for (const p of n.pages) if (p.bg.blob) await dbDel('blobs', p.bg.blob);
       if (n.thumb) await dbDel('blobs', n.thumb);
+      if (n.orig) await dbDel('blobs', n.orig.blob);
       await dbDel('notes', n.id);
       H.notes = H.notes.filter((x) => x.id !== n.id);
       if (E.note && E.note.id === n.id) { E.note = null; E.saveTimer && clearTimeout(E.saveTimer); E.saveTimer = 0; await closeNote(); }
@@ -928,6 +938,92 @@ async function exportPdf(n, target) {
   toast(`PDF 를 만들었어요: ${name}`);
 }
 
+// ---------- HWP 원본 글자 고치기 (HWP 편집기를 화면 위에 띄움: hwp/index.html?embed=1) ----------
+const HW = { frame: null, note: null, applying: null };
+const HWP_MIME = { hwp: 'application/x-hwp', hwpx: 'application/hwp+zip' };
+async function delBlob(id) {
+  if (!id) return;
+  await dbDel('blobs', id);
+  const ce = blobCache.get(id);
+  if (ce) { URL.revokeObjectURL(ce.url); blobCache.delete(id); }
+}
+async function openHwpEditor(n) {
+  if (!n || !n.orig || HW.frame) return;
+  if (E.note && E.note.id === n.id) await flushSave();
+  HW.note = n;
+  const f = document.createElement('iframe');
+  f.id = 'hwpFrame'; f.title = 'HWP 원본 글자 고치기';
+  f.src = 'hwp/index.html?embed=1&engine=../engine/';
+  document.body.appendChild(f);
+  HW.frame = f;
+  toast('고친 뒤 💾 를 누르면 노트에 반영돼요 · 펜 필기는 그대로 남아요', 4000);
+}
+function closeHwpEditor() {
+  if (!HW.frame) return;
+  HW.frame.remove();
+  HW.frame = null; HW.note = null;
+}
+window.addEventListener('message', async (e) => {
+  if (!HW.frame || e.source !== HW.frame.contentWindow || e.origin !== location.origin || !e.data) return;
+  const n = HW.note;
+  if (e.data.type === 'hwp-ready') {
+    const blob = (await dbGet('blobs', n.orig.blob))?.blob;
+    if (!blob) { toast('원본 HWP 를 찾지 못했어요', 4000); closeHwpEditor(); return; }
+    const buf = await blob.arrayBuffer();
+    HW.frame.contentWindow.postMessage({ type: 'hwp-open', bytes: buf, name: n.orig.name }, location.origin, [buf]);
+  } else if (e.data.type === 'hwp-saved') {
+    HW.applying = applyHwpEdit(n, new Uint8Array(e.data.bytes), e.data.fmt).finally(() => { HW.applying = null; });
+  } else if (e.data.type === 'hwp-close') {
+    closeHwpEditor();
+  }
+});
+/** 고친 HWP 로 쪽 그림을 새로 만들고, 같은 쪽 번호의 필기(펜·형광펜·글자)는 그대로 둠 */
+async function applyHwpEdit(n, bytes, fmt) {
+  let fresh;
+  try { fresh = await hwpPages(bytes, n.title || '문서'); }
+  catch (e) { busy(false); toast(`반영하지 못했어요: ${String(e.message || e)}`, 5000); return; }
+  busy(true, '노트에 반영하는 중…');
+  try {
+    const old = n.pages, pages = [];
+    const oldBg = [];
+    fresh.forEach((np, i) => {
+      const op = old[i];
+      if (op) { if (op.bg.blob) oldBg.push(op.bg.blob); pages.push({ ...op, w: np.w, h: np.h, bg: np.bg }); }
+      else pages.push(np);
+    });
+    let kept = 0;
+    for (let i = fresh.length; i < old.length; i++) {
+      const op = old[i];
+      if (op.strokes.length || op.texts.length || op.bg.t !== 'img') { pages.push(op); kept++; }
+      else if (op.bg.blob) oldBg.push(op.bg.blob);
+    }
+    const oldOrig = n.orig.blob;
+    n.orig = { ...n.orig, blob: await putBlob(new Blob([bytes])), fmt: fmt || n.orig.fmt };
+    n.pages = pages;
+    await saveNote(n, true);
+    for (const id of [...oldBg, oldOrig]) await delBlob(id);
+    if (E.note && E.note.id === n.id) { E.note = n; E.undo = []; E.redo = []; updateUndo(); buildPages(); }
+    toast(kept ? `반영했어요 · 문서가 짧아져서 필기가 있는 뒤쪽 ${kept}쪽은 그대로 두었어요` : `반영했어요 (${fresh.length}쪽)`, 4000);
+  } catch (e) {
+    toast(`반영하지 못했어요: ${String(e.message || e)}`, 5000);
+  } finally { busy(false); }
+}
+async function saveHwp(n) {
+  if (!n || !n.orig) return;
+  if (HW.applying) await HW.applying;
+  const blob = (await dbGet('blobs', n.orig.blob))?.blob;
+  if (!blob) { toast('원본 HWP 를 찾지 못했어요', 4000); return; }
+  const fmt = n.orig.fmt || 'hwp';
+  const name = `${(n.title || '문서').replace(/[\\/:*?"<>|]/g, '_')}.${fmt}`;
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (host) { host.saveFile(bytesToBase64(bytes), name, HWP_MIME[fmt]); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes], { type: HWP_MIME[fmt] }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(`저장했어요: ${name}`);
+}
+
 // ---------- 앱 정보 ----------
 $('infoBtn').onclick = () => { $('docText').hidden = true; $('infoSheet').hidden = false; };
 $('infoSheet').addEventListener('click', async (e) => {
@@ -964,6 +1060,7 @@ window.moaApp = {
   },
   /** 뒤로가기: 열린 창 → 편집 화면 → 앱 닫기 */
   handleBack() {
+    if (HW.frame) { const app = HW.frame.contentWindow.hwpApp; if (app && app.ready) app.handleBack(); else closeHwpEditor(); return; }
     for (const id of ['askSheet', 'noteMenu', 'newSheet', 'infoSheet']) if (!$(id).hidden) { if (id === 'askSheet') $(id).click(); else $(id).hidden = true; return; }
     if (E.note) { closeNote(); return; }
     if (H.query) { $('search').value = ''; H.query = ''; renderGrid(); return; }

@@ -8,6 +8,8 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Base64
 import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -47,6 +49,13 @@ class MainActivity : AppCompatActivity() {
     private val importDocs = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNullOrEmpty()) return@registerForActivityResult
         loadUris(uris)
+    }
+
+    /** HWP 원본 고치기 화면(웹)의 그림 넣기·서명용 <input type=file> → 사진 고르기 */
+    private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private val pickContent = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        fileCallback?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
+        fileCallback = null
     }
 
     /** 저장할 때 파일 이름과 형식(MIME)을 함께 넘기는 "다른 이름으로 저장" */
@@ -112,6 +121,14 @@ class MainActivity : AppCompatActivity() {
                 if (request.url.host == WebViewAssetLoader.DEFAULT_DOMAIN) return false
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
                 return true
+            }
+        }
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
+                fileCallback?.onReceiveValue(null)
+                fileCallback = callback
+                val type = params.acceptTypes.firstOrNull { it.isNotBlank() } ?: "*/*"
+                return runCatching { pickContent.launch(type) }.onFailure { fileCallback = null; callback.onReceiveValue(null) }.isSuccess
             }
         }
         web.addJavascriptInterface(Host(), "MoaHost")
