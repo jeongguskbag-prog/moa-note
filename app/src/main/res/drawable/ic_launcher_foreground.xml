@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 겹친 종이 두 장(여러 문서를 모음) + 펜. evenOdd 한 경로라 안드로이드 13 테마(단색) 아이콘에도 그대로 쓰임 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.55" android:pathData="M30,34 A4,4 0 0 1 34,30 H58 V34 H34 V76 H30 Z" />
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M42,38 H66 A4,4 0 0 1 70,42 V58 L56,72 V82 H42 A4,4 0 0 1 38,78 V42 A4,4 0 0 1 42,38 Z M44,48 H64 V52 H44 Z M44,58 H58 V62 H44 Z M44,68 H52 V72 H44 Z M80,56 L86,62 L64,84 L56,86 L58,78 Z" />
+</vector>

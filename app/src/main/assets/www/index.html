@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>모아노트</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-screen="home">
+
+<!-- ===== 첫 화면: 노트 목록 ===== -->
+<section id="home">
+  <header class="bar">
+    <h1>모아노트</h1>
+    <div class="searchBox"><input id="search" type="search" placeholder="노트 검색 (제목·글)" aria-label="노트 검색"></div>
+    <button id="infoBtn" class="ib" aria-label="앱 정보">ⓘ</button>
+  </header>
+  <nav id="folders" aria-label="폴더"></nav>
+  <main id="grid" aria-live="polite"></main>
+  <div id="emptyHome" hidden>
+    <p><strong>아직 노트가 없어요</strong></p>
+    <p class="muted">＋ 를 눌러 새 노트를 만들거나, HWP·PDF·사진을 가져와 그 위에 펜으로 써 보세요.</p>
+  </div>
+  <button id="fab" aria-label="새 노트">＋</button>
+</section>
+
+<!-- ===== 노트 편집 ===== -->
+<section id="editor" hidden>
+  <header class="bar ebar">
+    <button id="back" class="ib" aria-label="목록으로">←</button>
+    <input id="noteTitle" aria-label="노트 제목" maxlength="80">
+    <button id="undo" class="ib" aria-label="되돌리기" disabled>↶</button>
+    <button id="redo" class="ib" aria-label="다시 하기" disabled>↷</button>
+    <button id="noteMenuBtn" class="ib" aria-label="노트 메뉴">⋮</button>
+  </header>
+  <nav id="tools" aria-label="도구">
+    <button data-tool="pen" class="on"><svg viewBox="0 0 24 24"><path d="M3 21l4-1L19 8l-3-3L4 17z"/></svg><span>펜</span></button>
+    <button data-tool="hl"><svg viewBox="0 0 24 24"><path d="M9 15l-4 4h6l1-1"/><path d="M8 14l7-9 4 4-9 7z"/></svg><span>형광펜</span></button>
+    <button data-tool="eraser"><svg viewBox="0 0 24 24"><path d="M7 21h10"/><path d="M5 15l8-8 6 6-6 6H9z"/></svg><span>지우개</span></button>
+    <button data-tool="text"><svg viewBox="0 0 24 24"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg><span>글자</span></button>
+    <button data-tool="scroll"><svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M8 7l4-4 4 4"/><path d="M8 17l4 4 4-4"/></svg><span>넘기기</span></button>
+    <span class="tsep"></span>
+    <button id="penOnly" class="toggle" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M14 4l6 6-10 10H4v-6z"/><path d="M4 20l16-16" opacity=".35"/></svg><span>S펜만</span></button>
+  </nav>
+  <div id="penBar"></div>
+  <main id="pages"></main>
+</section>
+
+<!-- 새로 만들기 -->
+<div id="newSheet" class="sheet" hidden>
+  <div class="box">
+    <div class="title">새 노트</div>
+    <div class="tpls">
+      <button data-tpl="blank"><i class="tp blank"></i>무지</button>
+      <button data-tpl="lined"><i class="tp lined"></i>줄 노트</button>
+      <button data-tpl="grid"><i class="tp grid"></i>모눈</button>
+      <button data-tpl="dots"><i class="tp dots"></i>점</button>
+    </div>
+    <div class="title sub">문서 가져오기</div>
+    <button data-c="import" class="wide main">HWP · PDF · 사진 가져오기</button>
+    <p class="muted small">가져온 문서의 쪽마다 노트 한 장이 되고, 그 위에 펜으로 쓸 수 있어요.</p>
+    <button data-c="cancel" class="wide ghost">닫기</button>
+  </div>
+</div>
+
+<!-- 노트 메뉴 (편집 화면 ⋮, 목록에서 길게 누르기) -->
+<div id="noteMenu" class="sheet" hidden>
+  <div class="box">
+    <div class="title" id="noteMenuTitle">노트</div>
+    <button data-c="share" class="wide main">PDF 로 보내기 (카톡·메일·삼성 노트…)</button>
+    <button data-c="savePdf" class="wide">PDF 로 저장</button>
+    <button data-c="addPage" class="wide editorOnly">빈 쪽 추가</button>
+    <button data-c="delPage" class="wide editorOnly">지금 보는 쪽 지우기</button>
+    <button data-c="move" class="wide">폴더 옮기기</button>
+    <button data-c="rename" class="wide homeOnly">이름 바꾸기</button>
+    <button data-c="delete" class="wide danger">노트 지우기</button>
+    <button data-c="cancel" class="wide ghost">닫기</button>
+  </div>
+</div>
+
+<!-- 글자 입력 / 이름 묻기 / 폴더 고르기 -->
+<div id="askSheet" class="sheet" hidden>
+  <div class="box">
+    <div class="title" id="askTitle"></div>
+    <input id="askInput" maxlength="80">
+    <div id="askList"></div>
+    <div class="row">
+      <button data-c="cancel" class="ghost">취소</button>
+      <button data-c="ok" class="main">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 앱 정보·오픈소스 라이선스 -->
+<div id="infoSheet" class="sheet" hidden>
+  <div class="box">
+    <div class="title">모아노트</div>
+    <p class="small">손글씨 노트에 HWP·PDF·사진을 가져와 펜으로 쓰는 앱. 광고 없음 · 인터넷 권한 없음 · 노트는 이 휴대폰 안에만 저장돼요.</p>
+    <p class="small muted">본 제품은 한글과컴퓨터의 한/글 문서 파일(.hwp) 공개 문서를 참고하여 개발하였습니다.</p>
+    <button class="wide" data-doc="engine/LICENSE">HWP 엔진 rhwp (MIT)</button>
+    <button class="wide" data-doc="engine/notices/THIRD_PARTY_LICENSES.md">rhwp 오픈소스 라이선스</button>
+    <button class="wide" data-doc="pdfjs/LICENSE">PDF 엔진 pdf.js (Apache-2.0)</button>
+    <pre id="docText" hidden></pre>
+    <button data-c="cancel" class="wide ghost">닫기</button>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="busy" hidden><div class="spin"></div><span id="busyText">잠시만요…</span></div>
+<input type="file" id="fileInput" accept=".hwp,.hwpx,.pdf,image/*,application/pdf" multiple hidden>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

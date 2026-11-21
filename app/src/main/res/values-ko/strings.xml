@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">모아노트</string>
+    <string name="open_failed">파일을 열지 못했어요: %1$s</string>
+    <string name="too_large">파일이 너무 커요 (최대 100MB).</string>
+    <string name="share_failed">PDF 를 보내지 못했어요: %1$s</string>
+</resources>

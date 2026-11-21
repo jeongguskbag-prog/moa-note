@@ -1,0 +1,12 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+*.keystore
+*.jks
+# 엔진(HWP 26MB, PDF 10MB)은 빌드할 때 scripts/fetch-engines.sh 로 받음
+app/src/main/assets/www/engine/
+app/src/main/assets/www/pdfjs/
