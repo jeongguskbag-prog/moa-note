@@ -459,10 +459,11 @@ async function closeNote() {
 onTap($('back'), closeNote);
 $('noteTitle').addEventListener('input', () => { if (E.note) { E.note.title = $('noteTitle').value; scheduleSave(); } });
 
-function computeScale() {
+function computeFitScale() {
   const maxW = Math.max(...E.note.pages.map((p) => p.w));
   return Math.min(2, Math.max(0.3, ($('pages').clientWidth - 20) / maxW));
 }
+const computeScale = computeFitScale;
 const pageObserver = new IntersectionObserver((entries) => {
   for (const en of entries) {
     const i = +en.target.dataset.i;
@@ -475,6 +476,7 @@ function buildPages() {
   pageObserver.disconnect();
   box.innerHTML = ''; E.els = [];
   E.scale = computeScale();
+  lastW = $('pages').clientWidth;
   E.note.pages.forEach((pg, i) => {
     const el = document.createElement('div');
     el.className = 'page'; el.dataset.i = String(i);
@@ -523,10 +525,14 @@ function redrawInk(i) {
   g.setTransform(k, 0, 0, k, 0, 0);
   for (const s of pg.strokes) drawStroke(g, s);
 }
+// 화면 너비가 바뀔 때(가로·세로 돌리기)만 맞춤 배율로 다시 배치. 키보드가 올라오는 건 무시(확대 상태 유지)
+let lastW = 0;
 window.addEventListener('resize', () => {
   if (!E.note) return;
-  const s = computeScale();
-  if (Math.abs(s - E.scale) > 0.01) { const y = $('pages').scrollTop / E.scale; buildPages(); $('pages').scrollTop = y * E.scale; }
+  const w = $('pages').clientWidth;
+  if (Math.abs(w - lastW) < 2) return;
+  lastW = w;
+  const y = $('pages').scrollTop / E.scale; buildPages(); $('pages').scrollTop = y * E.scale;
 });
 
 // 도구
@@ -587,8 +593,8 @@ function onDown(e) {
   try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 무시 */ }
   E.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, page: i, stroke: null, erased: null });
   if (E.pointers.size >= 2) {
+    // 두 손가락: 그리던 획은 취소 (확대·축소·이동은 아래 손가락 확대 처리가 맡음)
     for (const p of E.pointers.values()) if (p.stroke) { const list = E.note.pages[p.page].strokes; const k = list.indexOf(p.stroke); if (k >= 0) list.splice(k, 1); redrawInk(p.page); p.stroke = null; }
-    E.pan = mid();
     return;
   }
   const p = E.pointers.get(e.pointerId);
@@ -604,7 +610,7 @@ function onMove(e) {
   if (!p) return;
   e.preventDefault();
   p.x = e.clientX; p.y = e.clientY;
-  if (E.pan) { const m = mid(); $('pages').scrollLeft -= m.x - E.pan.x; $('pages').scrollTop -= m.y - E.pan.y; E.pan = m; return; }
+  if (E.pointers.size >= 2 || pinch) return;
   const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
   if (E.tool === 'eraser' && p.erased != null) { for (const ce of events) eraseAt(p.page, pt(ce, e.currentTarget)); return; }
   if (!p.stroke) return;
@@ -625,12 +631,58 @@ function onMove(e) {
 function onUp(e) {
   const p = E.pointers.get(e.pointerId);
   E.pointers.delete(e.pointerId);
-  if (E.pointers.size < 2) E.pan = null;
   if (!p) return;
   if (p.stroke || (p.erased > 0)) scheduleSave();
   else if (p.erased === 0) E.undo.pop(), updateUndo(); // 지운 게 없으면 되돌리기 기록도 뺌
 }
-function mid() { let x = 0, y = 0; for (const p of E.pointers.values()) { x += p.x; y += p.y; } return { x: x / E.pointers.size, y: y / E.pointers.size }; }
+
+// ---------- 두 손가락으로 확대·축소·이동 (모든 도구, S펜만 모드에서도) ----------
+let pinch = null;
+const touchMid = (t) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+const touchDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+$('pages').addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 2 || !E.note) return;
+  const m = touchMid(e.touches);
+  pinch = { d: touchDist(e.touches), s: E.scale, m };
+}, { passive: true });
+$('pages').addEventListener('touchmove', (e) => {
+  if (!pinch || e.touches.length !== 2) return;
+  if (e.cancelable) e.preventDefault();
+  const m = touchMid(e.touches);
+  const fit = computeFitScale();
+  const s = Math.max(fit * 0.6, Math.min(4, pinch.s * touchDist(e.touches) / pinch.d));
+  zoomAt(s, m.x, m.y, m.x - pinch.m.x, m.y - pinch.m.y);
+  pinch.m = m;
+}, { passive: false });
+const endPinch = (e) => {
+  if (!pinch || e.touches.length >= 2) return;
+  pinch = null;
+  // 확대가 끝나면 보이는 쪽을 새 배율로 선명하게 다시 그림
+  E.els.forEach((pe, i) => { if (pe.drawn) drawPageEl(i); });
+};
+$('pages').addEventListener('touchend', endPinch);
+$('pages').addEventListener('touchcancel', endPinch);
+
+/** 배율을 s 로 바꾸되 손가락 사이(ax, ay) 아래 내용이 그 자리에 머물게. (dx, dy) 만큼 함께 옮김 */
+function zoomAt(s, ax, ay, dx = 0, dy = 0) {
+  const box = $('pages'), r = box.getBoundingClientRect();
+  const old = E.scale;
+  const cx = box.scrollLeft + ax - r.left, cy = box.scrollTop + ay - r.top;
+  applyScale(s);
+  const k = s / old;
+  box.scrollLeft = cx * k - (ax - r.left) - dx;
+  box.scrollTop = cy * k - (ay - r.top) - dy;
+}
+/** 쪽 상자·글자 상자 크기만 바꿈 (그림은 CSS 로 늘어나 보이고, 손을 떼면 다시 그림) */
+function applyScale(s) {
+  E.scale = s;
+  E.note.pages.forEach((pg, i) => {
+    const pe = E.els[i];
+    if (!pe) return;
+    pe.el.style.width = `${pg.w * s}px`; pe.el.style.height = `${pg.h * s}px`;
+    for (const el of pe.el.querySelectorAll('.tbox')) { const t = pg.texts.find((x) => x.id === el.dataset.id); if (t) placeTextEl(el, t, i); }
+  });
+}
 function eraseAt(i, [x, y]) {
   const pg = E.note.pages[i], r = E.style.eraser.width;
   const before = pg.strokes.length;
