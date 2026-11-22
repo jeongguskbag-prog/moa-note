@@ -394,6 +394,56 @@ function sdocText(b) {
   }
   return best;
 }
+/**
+ * .page 안의 펜 획. 획마다 [ASCII uuid "$\0"+36자] 머리 뒤 79바이트에
+ * 점 수(u16), 첫 점 x·y(f64), 나머지 점은 (dx, dy) 차이(부호+크기 16비트, 1/32 px),
+ * 이어서 첫 압력(f32)과 압력 차이(16비트, 1/1024). 꼬리에 색(BGRA)·굵기(f32, 0, 같은 굵기) */
+function sdocStrokes(b, k) {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const sm = (v) => (v & 0x8000 ? -(v & 0x7fff) : v);
+  const isId = (i) => {
+    if (b[i] !== 0x24 || b[i + 1] !== 0) return false;
+    for (let j = 0; j < 36; j++) {
+      const c = b[i + 2 + j];
+      if ([8, 13, 18, 23].includes(j) ? c !== 0x2d : !((c >= 0x30 && c <= 0x39) || (c >= 0x61 && c <= 0x66))) return false;
+    }
+    return true;
+  };
+  const starts = [];
+  for (let i = 26; i + 38 < b.length; i++) if (isId(i)) starts.push(i);
+  const out = [];
+  starts.forEach((s, j) => {
+    const end = Math.min(b.length, j + 1 < starts.length ? starts[j + 1] - 26 : b.length);
+    const at = s + 38 + 79;
+    if (at + 18 > end) return;
+    const n = dv.getUint16(at, true), x0 = dv.getFloat64(at + 2, true), y0 = dv.getFloat64(at + 10, true);
+    const pEnd = at + 18 + 4 * (n - 1);
+    if (n < 1 || pEnd + 4 + 2 * (n - 1) > end || !Number.isFinite(x0) || !Number.isFinite(y0) || Math.abs(x0) > 1e5 || Math.abs(y0) > 1e6) return;
+    let x = x0, y = y0, pr = dv.getFloat32(pEnd, true);
+    if (!(pr >= -1 && pr <= 2)) pr = 0.5;
+    const clampP = (v) => Math.round(Math.max(0.1, Math.min(1, v)) * 100) / 100;
+    const pts = [[x * k, y * k, clampP(pr)]];
+    for (let q = 1; q < n; q++) {
+      x += sm(dv.getUint16(at + 18 + 4 * (q - 1), true)) / 32;
+      y += sm(dv.getUint16(at + 20 + 4 * (q - 1), true)) / 32;
+      pr += sm(dv.getUint16(pEnd + 4 + 2 * (q - 1), true)) / 1024;
+      pts.push([Math.round(x * k * 10) / 10, Math.round(y * k * 10) / 10, clampP(pr)]);
+    }
+    // 꼬리에서 색·굵기 찾기: [색 4][굵기 f32][0 u32][같은 굵기 f32]
+    let color = '#111827', width = 2.4, hl = false;
+    for (let t = end - 16; t > pEnd; t--) {
+      const a = dv.getFloat32(t + 4, true);
+      if (a > 0 && a < 300 && a === dv.getFloat32(t + 12, true) && dv.getUint32(t + 8, true) === 0) {
+        color = '#' + [b[t + 2], b[t + 1], b[t]].map((v) => v.toString(16).padStart(2, '0')).join('');
+        hl = b[t + 3] < 200; // 반투명 → 형광펜
+        width = Math.max(0.6, a * k * (hl ? 1 : 0.8));
+        break;
+      }
+    }
+    out.push({ tool: hl ? 'hl' : 'pen', color, width, pts });
+  });
+  return out;
+}
 async function sdocPages(bytes) {
   const z = await unzip(bytes);
   const note = z.get('note.note');
@@ -403,12 +453,15 @@ async function sdocPages(bytes) {
   const info = z.get('pageIdInfo.dat');
   if (info) ids = (new TextDecoder('utf-16le').decode(info.subarray(0, info.length & ~1)).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) || []).filter((id) => z.has(`${id}.page`));
   if (!ids.length) ids = [...z.keys()].filter((k) => k.endsWith('.page')).map((k) => k.slice(0, -5));
-  const sizes = ids.map((id) => {
+  const pages = ids.map((id) => {
     const pg = z.get(`${id}.page`), dv = new DataView(pg.buffer, pg.byteOffset, pg.byteLength);
     const w = pg.length > 30 ? dv.getUint32(22, true) : 0, h = pg.length > 30 ? dv.getUint32(26, true) : 0;
-    return w > 100 && h > 100 && w < 20000 && h < 40000 ? PAGE_W * h / w : PAGE_H;
+    const okSize = w > 100 && h > 100 && w < 20000 && h < 40000;
+    const page = { ...blankPage('blank'), h: Math.round(okSize ? PAGE_W * h / w : PAGE_H) };
+    try { page.strokes = sdocStrokes(pg, PAGE_W / (okSize ? w : 1440)); } catch { /* 획을 못 읽어도 쪽은 가져옴 */ }
+    return page;
   });
-  const pages = (sizes.length ? sizes : [PAGE_H]).map((h) => ({ ...blankPage('blank'), h: Math.round(h) }));
+  if (!pages.length) pages.push(blankPage('blank'));
   // 본문 글자는 첫 쪽부터 글자 상자로 (쪽 높이에 맞춰 나눔)
   const text = sdocText(note).replace(/\s+$/, '');
   if (text) {
