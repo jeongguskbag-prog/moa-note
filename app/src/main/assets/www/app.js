@@ -141,7 +141,7 @@ longPress($('folders'), '[data-f]', async (b) => {
 
 $('search').addEventListener('input', () => { H.query = $('search').value.trim().toLowerCase(); renderGrid(); });
 
-const KIND = { hwp: 'HWP', pdf: 'PDF', image: '사진' };
+const KIND = { hwp: 'HWP', pdf: 'PDF', image: '사진', sdoc: 'S노트' };
 async function renderGrid() {
   const q = H.query;
   const list = H.notes
@@ -220,6 +220,7 @@ function detectKind(bytes, name, mime) {
   const ext = (/\.([^.]+)$/.exec(name || '') || [])[1]?.toLowerCase() || '';
   const head = String.fromCharCode(...bytes.subarray(0, 8));
   if (head.startsWith('%PDF') || ext === 'pdf' || mime === 'application/pdf') return 'pdf';
+  if (ext === 'sdocx' || ext === 'sdoc' || (head.startsWith('PK') && zipHas(bytes, 'note.note'))) return 'sdoc'; // 삼성 노트
   if (ext === 'hwp' || ext === 'hwpx' || /hwp/i.test(mime || '')) return 'hwp';
   if (bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0) return 'hwp'; // HWP 5.0 (OLE)
   if (head.startsWith('PK') && ext !== 'zip') return 'hwp';                                            // HWPX (ZIP)
@@ -238,6 +239,7 @@ async function importBytes(bytes, name, mime) {
     let pages;
     if (kind === 'pdf') pages = await pdfPages(bytes, name);
     else if (kind === 'hwp') pages = await hwpPages(bytes, name);
+    else if (kind === 'sdoc') pages = await sdocPages(bytes);
     else pages = [await imagePage(bytes, mime)];
     if (!pages.length) throw new Error('쪽이 없어요');
     // HWP 는 원본도 같이 보관 → 나중에 "원본 글자 고치기"·"HWP 로 저장"
@@ -343,6 +345,93 @@ async function hwpPages(bytes, name) {
   try { doc.free(); } catch { /* 무시 */ }
   return pages;
 }
+// ---------- 삼성 노트 (.sdocx: ZIP 안에 note.note·<쪽 id>.page) ----------
+/** ZIP 안에 이 이름의 파일이 있는지 (중앙 목록에서 이름만 찾음) */
+function zipHas(bytes, name) {
+  const want = new TextEncoder().encode(name);
+  outer: for (let i = Math.max(0, bytes.length - 65536); i < bytes.length - want.length; i++) {
+    for (let k = 0; k < want.length; k++) if (bytes[i + k] !== want[k]) continue outer;
+    return true;
+  }
+  return false;
+}
+/** 아주 작은 ZIP 읽기: 이름 → Uint8Array (stored·deflate) */
+async function unzip(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let e = bytes.length - 22;
+  while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('ZIP 이 아니에요');
+  let p = dv.getUint32(e + 16, true);
+  const n = dv.getUint16(e + 10, true), out = new Map(), dec = new TextDecoder();
+  for (let k = 0; k < n; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+    const nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+    const lho = dv.getUint32(p + 42, true);
+    const fname = dec.decode(bytes.subarray(p + 46, p + 46 + nlen));
+    const data = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
+    const raw = bytes.subarray(data, data + csize);
+    if (method === 0) out.set(fname, raw);
+    else if (method === 8) out.set(fname, new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()));
+    p += 46 + nlen + xlen + clen;
+  }
+  return out;
+}
+/** note.note 안의 본문 글자: [글자 수(u32)][UTF-16 글자] 꼴 중 가장 긴 것 */
+function sdocText(b) {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let best = '';
+  for (let i = 0; i + 8 < b.length; i++) {
+    const n = dv.getUint32(i, true);
+    if (n < 1 || n > 200000 || i + 4 + n * 2 > b.length || n <= best.length) continue;
+    let ok = true, s = '';
+    for (let k = 0; k < n; k++) {
+      const c = dv.getUint16(i + 4 + k * 2, true);
+      if ((c < 0x20 && c !== 10 && c !== 9) || (c >= 0xd800 && c < 0xe000) || c === 0xfffd) { ok = false; break; }
+      s += String.fromCharCode(c);
+    }
+    if (ok && /[가-힣A-Za-z0-9]/.test(s)) best = s;
+  }
+  return best;
+}
+async function sdocPages(bytes) {
+  const z = await unzip(bytes);
+  const note = z.get('note.note');
+  if (!note) throw new Error('삼성 노트 파일이 아니에요');
+  // 쪽 순서: pageIdInfo.dat 에 [길이 u16][UTF-16 id] 로 들어 있음. 없으면 ZIP 순서
+  let ids = [];
+  const info = z.get('pageIdInfo.dat');
+  if (info) ids = (new TextDecoder('utf-16le').decode(info.subarray(0, info.length & ~1)).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) || []).filter((id) => z.has(`${id}.page`));
+  if (!ids.length) ids = [...z.keys()].filter((k) => k.endsWith('.page')).map((k) => k.slice(0, -5));
+  const sizes = ids.map((id) => {
+    const pg = z.get(`${id}.page`), dv = new DataView(pg.buffer, pg.byteOffset, pg.byteLength);
+    const w = pg.length > 30 ? dv.getUint32(22, true) : 0, h = pg.length > 30 ? dv.getUint32(26, true) : 0;
+    return w > 100 && h > 100 && w < 20000 && h < 40000 ? PAGE_W * h / w : PAGE_H;
+  });
+  const pages = (sizes.length ? sizes : [PAGE_H]).map((h) => ({ ...blankPage('blank'), h: Math.round(h) }));
+  // 본문 글자는 첫 쪽부터 글자 상자로 (쪽 높이에 맞춰 나눔)
+  const text = sdocText(note).replace(/\s+$/, '');
+  if (text) {
+    const size = 20, lineH = size * 1.35, perPage = Math.max(1, Math.floor((pages[0].h - 120) / lineH));
+    // 긴 줄은 화면에서 접혀 여러 줄이 되므로, 접힌 줄 수로 세어 쪽을 나눔
+    const cpl = Math.floor((PAGE_W - 120) / (size * 0.95));
+    let pi = 0, used = 0, buf = [];
+    const flush = () => {
+      if (!buf.length) return;
+      if (!pages[pi]) pages.push({ ...blankPage('blank'), h: pages[0].h });
+      pages[pi].texts.push({ id: uid(), x: 60, y: 60, text: buf.join('\n'), size, color: '#111827', w: PAGE_W - 120 });
+      pi++; used = 0; buf = [];
+    };
+    for (const ln of text.split('\n')) {
+      const need = Math.max(1, Math.ceil(ln.length / cpl));
+      if (used + need > perPage) flush();
+      buf.push(ln); used += need;
+    }
+    flush();
+  }
+  return pages;
+}
+
 async function imagePage(bytes, mime) {
   const bmp = await createImageBitmap(new Blob([bytes], { type: mime || 'image/*' }));
   const k = Math.min(1, BG_W / bmp.width);
