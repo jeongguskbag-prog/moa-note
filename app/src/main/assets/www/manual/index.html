@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모아노트 사용 설명서</title>
+<style>
+  :root { --brand: #4338ca; --soft: #eef2ff; --fg: #111827; --muted: #6b7280; --line: #e5e7eb; --bg: #ffffff; --warn: #fff7ed; --warnline: #fdba74; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --soft: #262a4a; --fg: #e5e7eb; --muted: #9ca3af; --line: #2b2f3a; --bg: #0f1117; --warn: #2a1d10; --warnline: #9a5b1e; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", sans-serif; line-height: 1.7; word-break: keep-all; }
+  main { max-width: 760px; margin: 0 auto; padding: 0 16px 60px; }
+  header.cover { background: var(--brand); color: #fff; padding: 36px 16px 30px; text-align: center; }
+  header.cover h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: -0.5px; }
+  header.cover p { margin: 0; opacity: .9; }
+  h2 { margin: 44px 0 10px; font-size: 22px; padding-bottom: 6px; border-bottom: 2px solid var(--brand); }
+  h3 { margin: 26px 0 6px; font-size: 17.5px; color: var(--brand); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) h3 { color: #a5b4fc; } }
+  p, li { font-size: 15.5px; }
+  ol, ul { padding-left: 22px; }
+  .toc { background: var(--soft); border-radius: 14px; padding: 14px 18px; margin-top: 22px; }
+  .toc ol { margin: 6px 0; }
+  .toc a { color: inherit; }
+  .shots { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+  figure { margin: 0; flex: 1 1 200px; max-width: 280px; }
+  figure img { width: 100%; border-radius: 14px; border: 1px solid var(--line); display: block; }
+  figcaption { font-size: 13px; color: var(--muted); text-align: center; margin-top: 4px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); white-space: nowrap; }
+  .tip, .warn { border-radius: 12px; padding: 10px 14px; margin: 12px 0; font-size: 15px; }
+  .tip { background: var(--soft); }
+  .warn { background: var(--warn); border: 1px solid var(--warnline); }
+  kbd { font-family: inherit; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; font-size: 14px; white-space: nowrap; }
+  footer { margin-top: 50px; color: var(--muted); font-size: 13px; text-align: center; }
+  @media print { h2 { break-after: avoid; } figure, .tip, .warn, table { break-inside: avoid; } header.cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+<!-- 앱 안에서 열었을 때: 위쪽에 "앱으로 돌아가기" -->
+<div style="position:sticky;top:0;z-index:9;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 12px"><button onclick="history.length>1?history.back():location.href='../index.html'" style="font-size:16px;padding:10px 16px;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--soft);color:var(--fg)">← 모아노트로 돌아가기</button></div>
+
+<header class="cover">
+  <h1>모아노트 사용 설명서</h1>
+  <p>손글씨 노트 + HWP · PDF · 사진 · 삼성 노트 가져와서 펜으로 쓰기</p>
+</header>
+<main>
+
+<div class="toc">
+  <strong>차례</strong>
+  <ol>
+    <li><a href="#about">모아노트는 어떤 앱인가요</a></li>
+    <li><a href="#home">첫 화면 (노트 목록)</a></li>
+    <li><a href="#new">새 노트 만들기</a></li>
+    <li><a href="#import">문서 가져오기 (HWP · PDF · 사진 · 삼성 노트)</a></li>
+    <li><a href="#write">노트에 쓰기 — 도구 줄</a></li>
+    <li><a href="#spen">S펜만 모드와 화면 넘기기 · 확대</a></li>
+    <li><a href="#hwp">HWP 원본 글자 고치기</a></li>
+    <li><a href="#menu">노트 메뉴 (PDF 보내기 · 쪽 · 폴더 · 지우기)</a></li>
+    <li><a href="#folder">폴더와 검색</a></li>
+    <li><a href="#save">저장과 백업</a></li>
+    <li><a href="#faq">자주 묻는 질문</a></li>
+  </ol>
+</div>
+
+<h2 id="about">1. 모아노트는 어떤 앱인가요</h2>
+<p>모아노트는 <strong>손글씨 노트 앱</strong>이에요. 빈 노트에 바로 쓰는 것은 물론, <strong>HWP(한글) · PDF · 사진 · 삼성 노트</strong> 파일을 가져와서 그 위에 S펜이나 손가락으로 쓸 수 있어요.</p>
+<ul>
+  <li>광고가 없어요.</li>
+  <li>인터넷 권한이 없어요. 노트는 <strong>이 휴대폰 안에만</strong> 저장되고 어디로도 보내지 않아요.</li>
+  <li>HWP 문서는 앱 안에서 원래 글자도 고칠 수 있어요 (7장).</li>
+  <li>다 쓴 노트는 PDF 로 만들어 카카오톡 · 메일 · 삼성 노트 등으로 보낼 수 있어요.</li>
+</ul>
+
+<h2 id="home">2. 첫 화면 (노트 목록)</h2>
+<div class="shots">
+  <figure><img src="img/01-empty.jpg" alt="처음 실행한 빈 화면"><figcaption>처음 실행했을 때</figcaption></figure>
+  <figure><img src="img/12-home.jpg" alt="노트가 있는 첫 화면"><figcaption>노트가 생긴 뒤</figcaption></figure>
+</div>
+<table>
+  <tr><th>위치</th><th>하는 일</th></tr>
+  <tr><td>맨 위 검색 칸</td><td>노트 제목과 노트 안 글자(글자 도구로 쓴 글)로 찾아요.</td></tr>
+  <tr><td>오른쪽 위 ⓘ</td><td>앱 정보, 오픈소스 라이선스.</td></tr>
+  <tr><td>폴더 줄 (전체 · 폴더 · ＋ 폴더)</td><td>폴더를 눌러 그 폴더의 노트만 봐요. 9장 참고.</td></tr>
+  <tr><td>노트 카드</td><td>누르면 열려요. <strong>길게 누르면</strong> 노트 메뉴(보내기 · 이름 바꾸기 · 폴더 옮기기 · 지우기)가 나와요.</td></tr>
+  <tr><td>카드 왼쪽 아래 표시</td><td>가져온 문서 종류: <kbd>HWP</kbd> <kbd>PDF</kbd> <kbd>사진</kbd> <kbd>S노트</kbd>. 표시가 없으면 직접 만든 노트예요.</td></tr>
+  <tr><td>오른쪽 아래 ＋</td><td>새 노트 만들기 / 문서 가져오기.</td></tr>
+</table>
+
+<h2 id="new">3. 새 노트 만들기</h2>
+<div class="shots">
+  <figure><img src="img/02-new.jpg" alt="새 노트 창"><figcaption>＋ 를 누르면 나오는 창</figcaption></figure>
+</div>
+<ol>
+  <li>첫 화면 오른쪽 아래 <kbd>＋</kbd> 를 눌러요.</li>
+  <li>종이 모양을 골라요: <strong>무지</strong>(빈 종이) · <strong>줄 노트</strong> · <strong>모눈</strong> · <strong>점</strong>.</li>
+  <li>바로 노트가 열리고 펜으로 쓸 수 있어요. 제목은 "줄 노트 오늘 09:01" 처럼 자동으로 붙어요.</li>
+</ol>
+<div class="tip">💡 제목을 바꾸려면 노트 화면 맨 위의 제목 글자를 눌러 고치면 돼요. 바로 저장돼요.</div>
+
+<h2 id="import">4. 문서 가져오기 (HWP · PDF · 사진 · 삼성 노트)</h2>
+<ol>
+  <li><kbd>＋</kbd> → <strong>"HWP · PDF · 사진 · 삼성 노트 가져오기"</strong> 를 눌러요.</li>
+  <li>휴대폰 파일 고르는 화면이 열려요. 파일을 고르면 돼요. <strong>여러 개를 한 번에</strong> 골라도 돼요 (파일마다 노트가 하나씩 생겨요).</li>
+  <li>가져오는 동안 "가져오는 중… 3 / 6" 처럼 진행이 보여요. 끝나면 노트가 열려요.</li>
+</ol>
+<table>
+  <tr><th>파일</th><th>어떻게 들어오나요</th></tr>
+  <tr><td>HWP · HWPX</td><td>쪽마다 노트 한 장. 쪽 그림 위에 펜으로 써요. <strong>원본도 함께 보관</strong>해서 나중에 원래 글자를 고칠 수 있어요 (7장).</td></tr>
+  <tr><td>PDF</td><td>쪽마다 노트 한 장. 쪽 그림 위에 펜으로 써요.</td></tr>
+  <tr><td>사진 (JPG · PNG 등)</td><td>사진 한 장이 노트 한 장.</td></tr>
+  <tr><td>삼성 노트 (.sdocx)</td><td>삼성 노트에서 쓴 <strong>손글씨 획</strong>(색 · 굵기 · 필압)과 <strong>입력한 글자</strong>가 들어와요. 손글씨는 모아노트 필기가 되어 지우개로 지우거나 이어 쓸 수 있어요.</td></tr>
+</table>
+<div class="tip">💡 다른 앱에서도 보낼 수 있어요. 카카오톡 · 내 파일 등에서 PDF · HWP 를 <strong>열기</strong> 또는 <strong>공유 → 모아노트</strong>를 고르면 새 노트로 들어와요.</div>
+<div class="warn">⚠️ 파일 고르는 화면에는 모든 파일이 보여요. 모아노트가 못 여는 파일을 고르면 "가져올 수 없는 파일이에요" 라고 알려 줘요.<br>
+⚠️ 삼성 노트의 사진 · 녹음은 아직 옮기지 못해요.</div>
+
+<h2 id="write">5. 노트에 쓰기 — 도구 줄</h2>
+<div class="shots">
+  <figure><img src="img/03-editor.jpg" alt="노트 편집 화면"><figcaption>펜 · 형광펜으로 쓴 노트</figcaption></figure>
+  <figure><img src="img/04-text.jpg" alt="글자 도구"><figcaption>글자 도구</figcaption></figure>
+</div>
+<h3>맨 위 줄</h3>
+<table>
+  <tr><th>버튼</th><th>하는 일</th></tr>
+  <tr><td>←</td><td>목록으로 돌아가요 (자동 저장돼요).</td></tr>
+  <tr><td>제목</td><td>눌러서 노트 이름을 고쳐요.</td></tr>
+  <tr><td>↶ ↷</td><td>되돌리기 / 다시 하기. 획 · 지우기 · 글자 · 쪽 추가/지우기를 되돌릴 수 있어요.</td></tr>
+  <tr><td>⋮</td><td>노트 메뉴 (8장).</td></tr>
+</table>
+<h3>도구</h3>
+<table>
+  <tr><th>도구</th><th>쓰는 법</th></tr>
+  <tr><td>펜</td><td>글씨 · 그림. 아래 줄에서 <strong>색 6가지</strong>와 <strong>굵기 3가지</strong>를 골라요. S펜은 누르는 힘(필압)에 따라 굵기가 달라져요.</td></tr>
+  <tr><td>형광펜</td><td>반투명 색으로 칠해요. 노랑 · 초록 · 분홍 · 파랑, 굵기 3가지. 겹쳐 칠해도 진해지지 않아요.</td></tr>
+  <tr><td>지우개</td><td>문지른 곳에 닿은 <strong>획 전체</strong>를 지워요. 굵기 3가지 (클수록 넓게 지워요). 쪽 그림(가져온 문서)은 지워지지 않아요.</td></tr>
+  <tr><td>글자</td><td>글자를 넣을 곳을 누르면 글자 상자가 생기고 키보드가 올라와요. 쓴 글자 상자를 다시 누르면 고칠 수 있어요. 글자를 모두 지우면 상자도 없어져요. 글자 색은 그때 고른 펜 색이에요.</td></tr>
+  <tr><td>넘기기</td><td>손가락으로 써지지 않고 화면만 넘어가요. 문서를 읽기만 할 때 편해요.</td></tr>
+  <tr><td>HWP 고치기</td><td>HWP 노트에만 보여요. 원래 문서 글자를 고쳐요 (7장).</td></tr>
+  <tr><td>S펜만</td><td>켜면 S펜으로만 써지고 손가락은 화면을 넘겨요 (6장).</td></tr>
+</table>
+<div class="shots">
+  <figure><img src="img/05-hl.jpg" alt="형광펜 색"><figcaption>형광펜 색 · 굵기</figcaption></figure>
+  <figure><img src="img/06-eraser.jpg" alt="지우개 굵기"><figcaption>지우개 굵기</figcaption></figure>
+</div>
+<div class="tip">💡 쪽이 더 필요하면 맨 아래 <kbd>＋ 빈 쪽 추가</kbd> 를 눌러요. 줄 노트는 줄 노트 쪽이 추가돼요.</div>
+
+<h2 id="spen">6. S펜만 모드와 화면 넘기기 · 확대</h2>
+<h3>S펜만 모드</h3>
+<p>도구 줄 오른쪽 <strong>S펜만</strong>을 켜면:</p>
+<ul>
+  <li><strong>S펜</strong> → 글씨만 써지고 화면은 움직이지 않아요.</li>
+  <li><strong>손가락 한 개</strong> → 화면을 위아래로 넘겨요. 빠르게 밀고 떼면 미끄러지듯 넘어가요.</li>
+  <li><strong>손바닥</strong> → 펜이 화면에 닿아 있는 동안 손바닥이 닿아도 그려지거나 넘어가지 않아요.</li>
+</ul>
+<p>한 번 켜 두면 다음에 앱을 열어도 그대로예요. S펜으로 처음 쓰면 "S펜만을 켜 보세요" 안내가 한 번 나와요.</p>
+<h3>S펜만이 꺼져 있을 때</h3>
+<ul>
+  <li>손가락 한 개로도 써져요. 화면 넘기기는 <strong>두 손가락</strong>으로 해요.</li>
+</ul>
+<h3>확대 · 축소</h3>
+<ul>
+  <li><strong>두 손가락</strong>을 벌리면 확대, 오므리면 축소. 손가락 사이 부분이 그 자리에 머물러요.</li>
+  <li>두 손가락을 대고 함께 움직이면 화면이 따라 움직여요.</li>
+  <li>손을 떼면 그 배율에 맞게 선명하게 다시 그려요.</li>
+</ul>
+
+<h2 id="hwp">7. HWP 원본 글자 고치기</h2>
+<p>가져온 HWP 는 쪽 그림 위에 펜으로 쓰는 것 말고도, <strong>원래 문서의 글자를 직접 고칠 수</strong> 있어요. 주민등록번호 칸 같은 네모 칸도 한 칸씩 커서를 놓고 지우고 쓸 수 있어요.</p>
+<div class="shots">
+  <figure><img src="img/08-hwp.jpg" alt="HWP 노트"><figcaption>HWP 노트 — 도구 줄에 "HWP 고치기"</figcaption></figure>
+  <figure><img src="img/10-hwpedit.jpg" alt="HWP 편집 화면"><figcaption>앱 안 HWP 편집 화면</figcaption></figure>
+</div>
+<ol>
+  <li>HWP 노트를 열고 도구 줄의 <strong>HWP 고치기</strong> (또는 ⋮ → <strong>원본 글자 고치기</strong>)를 눌러요.</li>
+  <li>HWP 편집 화면이 열려요. 문서를 누르면 그 자리에 커서가 놓이고 바로 고칠 수 있어요.<br>
+    글자 크기(가), 펜 · 형광펜 · 사각형 · 이미지 · 서명 · 체크 도구도 쓸 수 있어요.</li>
+  <li>다 고쳤으면 위쪽 <kbd>💾</kbd> 를 눌러요 → <strong>"노트에 반영했어요"</strong>.<br>
+    노트의 쪽 그림이 고친 내용으로 바뀌고, <strong>그 위에 펜으로 써 둔 필기는 그대로 남아요.</strong></li>
+  <li><kbd>✕</kbd> 또는 휴대폰 뒤로 버튼으로 노트로 돌아와요. 반영하지 않은 내용이 있으면 먼저 물어봐요.</li>
+</ol>
+<p><strong>고친 HWP 파일 받기:</strong> ⋮ → <strong>HWP 로 저장 (고친 원본)</strong> → 저장할 곳과 이름을 정해요. 한글 · HWP 편집기 등 다른 앱에서 열 수 있는 진짜 HWP 파일이에요.</p>
+<div class="warn">⚠️ <strong>예전에 가져온 HWP 노트</strong>(이 기능이 생기기 전)는 원본이 저장돼 있지 않아요. "HWP 고치기"를 누르면 <strong>원본 HWP 파일을 골라 연결할지</strong> 물어봐요. 같은 파일을 고르면 노트가 새로 생기지 않고 지금 노트에 연결돼요. 필기는 그대로예요.<br>
+⚠️ 고쳐서 <strong>쪽 수가 바뀌면</strong> 필기는 같은 쪽 번호에 남아요 (예: 2쪽의 필기는 계속 2쪽에). 문서가 짧아져도 필기가 있는 뒤쪽은 지우지 않고 남겨요.</div>
+
+<h2 id="menu">8. 노트 메뉴</h2>
+<div class="shots">
+  <figure><img src="img/07-menu.jpg" alt="노트 메뉴"><figcaption>일반 노트 메뉴</figcaption></figure>
+  <figure><img src="img/09-hwpmenu.jpg" alt="HWP 노트 메뉴"><figcaption>HWP 노트 메뉴</figcaption></figure>
+</div>
+<p>노트 화면의 <kbd>⋮</kbd>, 또는 목록에서 노트 카드를 <strong>길게 누르면</strong> 나와요.</p>
+<table>
+  <tr><th>메뉴</th><th>하는 일</th></tr>
+  <tr><td>원본 글자 고치기 (HWP 편집)</td><td>HWP 노트만. 7장.</td></tr>
+  <tr><td>HWP 로 저장 (고친 원본)</td><td>HWP 노트만. 고친 HWP 파일을 저장해요.</td></tr>
+  <tr><td>PDF 로 보내기</td><td>필기까지 합친 PDF 를 만들어 카카오톡 · 메일 · 삼성 노트 등으로 바로 보내요.</td></tr>
+  <tr><td>PDF 로 저장</td><td>PDF 파일을 휴대폰에 저장해요 (저장할 폴더 · 이름을 골라요).</td></tr>
+  <tr><td>빈 쪽 추가</td><td>맨 뒤에 빈 쪽을 하나 더해요.</td></tr>
+  <tr><td>지금 보는 쪽 지우기</td><td>화면 가운데 보이는 쪽을 지워요. ↶ 로 살릴 수 있어요. 마지막 한 쪽은 못 지워요.</td></tr>
+  <tr><td>폴더 옮기기</td><td>노트를 다른 폴더로 옮겨요.</td></tr>
+  <tr><td>이름 바꾸기</td><td>목록에서 길게 눌렀을 때 나와요.</td></tr>
+  <tr><td>노트 지우기</td><td>노트를 완전히 지워요. <strong>되돌릴 수 없어요.</strong></td></tr>
+</table>
+
+<h2 id="folder">9. 폴더와 검색</h2>
+<div class="shots">
+  <figure><img src="img/11-folder.jpg" alt="새 폴더"><figcaption>＋ 폴더</figcaption></figure>
+  <figure><img src="img/13-search.jpg" alt="검색"><figcaption>검색</figcaption></figure>
+</div>
+<ul>
+  <li><strong>폴더 만들기:</strong> 폴더 줄의 <kbd>＋ 폴더</kbd> → 이름 → 확인. 폴더를 고른 상태에서 만든 새 노트는 그 폴더에 들어가요.</li>
+  <li><strong>노트 옮기기:</strong> 노트 메뉴 → 폴더 옮기기.</li>
+  <li><strong>폴더 이름 바꾸기 · 지우기:</strong> 폴더를 <strong>길게 누르기</strong> → 이름을 고치면 바뀌고, <strong>이름을 비우고 확인</strong>하면 폴더가 지워져요. 안에 있던 노트는 지워지지 않고 "전체"에 남아요.</li>
+  <li><strong>검색:</strong> 맨 위 검색 칸에 쓰면 제목과 글자 도구로 쓴 글에서 찾아요. (손글씨 자체는 검색되지 않아요.)</li>
+</ul>
+
+<h2 id="save">10. 저장과 백업</h2>
+<ul>
+  <li><strong>저장 버튼이 없어요.</strong> 쓰는 대로 자동 저장돼요. 앱을 닫거나 다른 앱으로 가도 저장돼요.</li>
+  <li>노트는 앱 안 저장 공간에 있어요. <strong>앱을 지우거나 "데이터 삭제"를 하면 노트도 지워져요.</strong></li>
+  <li>중요한 노트는 <strong>PDF 로 저장</strong>하거나, HWP 노트는 <strong>HWP 로 저장</strong>해서 따로 보관해 두세요.</li>
+  <li>앱을 새 버전으로 업데이트할 때는 노트가 그대로 남아요.</li>
+</ul>
+
+<h2 id="faq">11. 자주 묻는 질문</h2>
+<h3>S펜으로 쓰는데 화면이 같이 움직여요</h3>
+<p>최신 버전으로 업데이트해 주세요. S펜만 모드에서 펜으로 쓸 때 화면이 움직이지 않도록 고쳤어요.</p>
+<h3>손바닥이 닿으면 선이 그어져요</h3>
+<p>도구 줄의 <strong>S펜만</strong>을 켜 주세요.</p>
+<h3>가져온 문서 글자가 흐려요</h3>
+<p>두 손가락으로 확대한 뒤 손을 떼면 그 배율로 다시 선명하게 그려요.</p>
+<h3>HWP 메뉴에 "원본 글자 고치기"가 안 보여요</h3>
+<p>예전에 가져온 노트라 원본이 없는 경우예요. 도구 줄의 <strong>HWP 고치기</strong>를 눌러 원본 파일을 연결해 주세요 (7장).</p>
+<h3>삼성 노트 파일(.sdocx)은 어디서 찾나요?</h3>
+<p>삼성 노트에서 노트를 열고 <strong>공유 → 삼성 노트 파일</strong>로 저장하거나 보내면 .sdocx 파일이 생겨요. 모아노트에서 ＋ → 가져오기로 그 파일을 골라요.</p>
+<h3>지운 노트를 살릴 수 있나요?</h3>
+<p>노트 지우기는 되돌릴 수 없어요. 쪽 지우기와 필기 지우기는 노트를 닫기 전까지 ↶ 로 되돌릴 수 있어요.</p>
+
+<div class="warn">🔒 노트에 주민등록번호 · 비밀번호 · 결제 키 같은 중요한 정보를 적었다면, 그 노트를 PDF 로 보내거나 화면을 캡처해 공유할 때 꼭 확인하세요.</div>
+
+<footer>
+  모아노트 · 광고 없음 · 인터넷 권한 없음<br>
+  본 제품은 한글과컴퓨터의 한/글 문서 파일(.hwp) 공개 문서를 참고하여 개발하였습니다.
+</footer>
+</main>
+</body>
+</html>

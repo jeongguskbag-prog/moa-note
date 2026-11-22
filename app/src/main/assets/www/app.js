@@ -1229,6 +1229,8 @@ async function saveHwp(n) {
 
 // ---------- 앱 정보 ----------
 $('infoBtn').onclick = () => { $('docText').hidden = true; $('infoSheet').hidden = false; };
+// 앱 안에 넣어 둔 사용 설명서 (인터넷 없이 열림). 휴대폰 뒤로 가기 또는 위쪽 단추로 돌아옴
+$('manualBtn').onclick = () => { location.href = 'manual/index.html'; };
 $('infoSheet').addEventListener('click', async (e) => {
   const sheet = $('infoSheet');
   const b = e.target.closest('button');

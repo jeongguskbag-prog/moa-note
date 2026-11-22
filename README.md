@@ -3,7 +3,7 @@
 손글씨 노트에 **HWP·PDF·사진**을 그대로 가져와 그 위에 S펜으로 쓰는 안드로이드 노트 앱.
 광고 없음, 인터넷 권한 없음 — 노트는 휴대폰 안(앱 전용 저장 공간)에만 저장됩니다.
 
-사용 설명서: [`docs/manual/index.html`](docs/manual/index.html) (PDF: `docs/manual/moanote-manual.pdf`)
+사용 설명서: [`docs/manual/index.html`](docs/manual/index.html) — 앱 안에도 들어 있음(`www/manual/`, 앱 정보 ⓘ → 📖 사용 설명서). 설명서를 고치면 `www/manual/` 에도 복사
 
 ## 1단계 기능
 - **노트**: 무지·줄 노트·모눈·점 종이, 쪽 추가·지우기, 제목, 자동 저장
