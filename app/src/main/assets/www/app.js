@@ -594,8 +594,9 @@ function onDown(e) {
   if (E.tool === 'text') { e.preventDefault(); const [x, y] = pt(e, e.currentTarget); newText(i, x, y); return; }
   if (E.tool === 'scroll') return;
   if (e.pointerType === 'pen' && !E.penOnly && !E.penHinted) { E.penHinted = true; toast('S펜이 감지됐어요 · "S펜만"을 켜면 손바닥이 닿아도 그려지지 않아요', 4000); }
-  if (E.penOnly && e.pointerType === 'touch') return; // 손가락은 화면 넘기기
+  if (E.penOnly && e.pointerType === 'touch') { e.preventDefault(); fingerPanStart(e); return; } // 손가락은 화면 넘기기 (직접 처리)
   e.preventDefault();
+  if (e.pointerType === 'pen') fingerPanStop(); // 펜이 닿으면 손바닥·손가락 넘기기는 멈춤
   try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 무시 */ }
   E.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, page: i, stroke: null, erased: null });
   if (E.pointers.size >= 2) {
@@ -612,6 +613,7 @@ function onDown(e) {
   redrawInk(i);
 }
 function onMove(e) {
+  if (e.pointerId === FP.id) { e.preventDefault(); fingerPanMove(e); return; }
   const p = E.pointers.get(e.pointerId);
   if (!p) return;
   e.preventDefault();
@@ -635,12 +637,48 @@ function onMove(e) {
   if (p.stroke.tool !== 'pen') redrawInk(p.page);
 }
 function onUp(e) {
+  if (e.pointerId === FP.id) { fingerPanEnd(e); return; }
   const p = E.pointers.get(e.pointerId);
   E.pointers.delete(e.pointerId);
   if (!p) return;
   if (p.stroke || (p.erased > 0)) scheduleSave();
   else if (p.erased === 0) E.undo.pop(), updateUndo(); // 지운 게 없으면 되돌리기 기록도 뺌
 }
+
+// ---------- S펜만 모드: 손가락 한 개로 화면 넘기기 ----------
+// 쓰는 곳(canvas)은 늘 touch-action: none — 브라우저가 스스로 넘기게 두면 S펜으로 쓸 때도 화면이 함께 움직이고 획이 끊김.
+// 그래서 손가락 넘기기는 직접 처리하고, 펜이 화면에 닿아 있는 동안(손바닥)은 넘기지 않음
+const FP = { id: null, x: 0, y: 0, vx: 0, vy: 0, t: 0, raf: 0 };
+const penDown = () => [...E.pointers.keys()].length > 0;
+function fingerPanStart(e) {
+  cancelAnimationFrame(FP.raf);
+  if (FP.id != null || penDown() || pinch) return;
+  try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 무시 */ }
+  Object.assign(FP, { id: e.pointerId, x: e.clientX, y: e.clientY, vx: 0, vy: 0, t: e.timeStamp });
+}
+function fingerPanMove(e) {
+  if (pinch || penDown()) { fingerPanStop(); return; }
+  const box = $('pages'), dx = e.clientX - FP.x, dy = e.clientY - FP.y, dt = Math.max(1, e.timeStamp - FP.t);
+  box.scrollLeft -= dx; box.scrollTop -= dy;
+  FP.vx = 0.8 * (dx / dt) + 0.2 * FP.vx; FP.vy = 0.8 * (dy / dt) + 0.2 * FP.vy;
+  FP.x = e.clientX; FP.y = e.clientY; FP.t = e.timeStamp;
+}
+function fingerPanEnd(e) {
+  const stale = e.timeStamp - FP.t > 80; // 멈췄다 떼면 미끄러지지 않음
+  let vx = stale ? 0 : FP.vx, vy = stale ? 0 : FP.vy;
+  FP.id = null;
+  if (e.type === 'pointercancel' || penDown()) return;
+  const box = $('pages');
+  let last = performance.now();
+  const step = (now) => {
+    const dt = Math.min(40, now - last); last = now;
+    box.scrollLeft -= vx * dt; box.scrollTop -= vy * dt;
+    const f = Math.pow(0.995, dt); vx *= f; vy *= f;
+    if (Math.hypot(vx, vy) > 0.02 && FP.id == null && !penDown()) FP.raf = requestAnimationFrame(step);
+  };
+  if (Math.hypot(vx, vy) > 0.1) FP.raf = requestAnimationFrame(step);
+}
+function fingerPanStop() { cancelAnimationFrame(FP.raf); FP.id = null; }
 
 // ---------- 두 손가락으로 확대·축소·이동 (모든 도구, S펜만 모드에서도) ----------
 let pinch = null;
@@ -650,6 +688,7 @@ $('pages').addEventListener('touchstart', (e) => {
   if (e.touches.length !== 2 || !E.note) return;
   const m = touchMid(e.touches);
   pinch = { d: touchDist(e.touches), s: E.scale, m };
+  fingerPanStop();
 }, { passive: true });
 $('pages').addEventListener('touchmove', (e) => {
   if (!pinch || e.touches.length !== 2) return;

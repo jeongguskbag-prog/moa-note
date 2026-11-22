@@ -70,7 +70,8 @@ button { font: inherit; color: inherit; }
 .page { position: relative; flex: none; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
 .page canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .page canvas.ink { touch-action: none; }
-body.penOnly .page canvas.ink, body[data-tool="scroll"] .page canvas.ink { touch-action: pan-x pan-y; }
+/* S펜만 모드에서도 none: 손가락 넘기기는 app.js 가 직접 처리 (펜으로 쓸 때 화면이 같이 움직이지 않게) */
+body[data-tool="scroll"] .page canvas.ink { touch-action: pan-x pan-y; }
 .page .pno { position: absolute; right: 4px; bottom: -18px; font-size: 11px; color: var(--muted); }
 .addPage { flex: none; padding: 12px 22px; border: 1.5px dashed var(--line); border-radius: 12px; background: transparent; color: var(--muted); font-size: 14px; }
 /* 글자 상자 */
