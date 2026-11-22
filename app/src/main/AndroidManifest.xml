@@ -21,7 +21,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- 다른 앱에서 HWP·PDF 를 "열기" 또는 "공유" 하면 새 노트로 가져옴 -->
+            <!-- 다른 앱에서 HWP·PDF·삼성 노트 를 "열기" 또는 "공유" 하면 새 노트로 가져옴 -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.SEND" />
@@ -33,6 +33,7 @@
                 <data android:mimeType="application/hwp+zip" />
                 <data android:mimeType="application/vnd.hancom.hwpx" />
                 <data android:mimeType="application/haansofthwpx" />
+                <data android:mimeType="application/sdoc" />
             </intent-filter>
         </activity>
 

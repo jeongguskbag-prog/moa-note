@@ -271,6 +271,9 @@ class MainActivity : AppCompatActivity() {
             "application/x-hwp", "application/haansofthwp", "application/vnd.hancom.hwp", "application/hwp",
             "application/hwp+zip", "application/vnd.hancom.hwpx", "application/haansofthwpx", "application/x-hwpx",
             "application/octet-stream", "application/zip",
+            // 삼성 노트(.sdocx): 삼성 폰은 "application/sdoc" 등으로 알려 줌. 기기마다 달라서 모든 파일도 고를 수 있게 두고,
+            // 가져올 수 없는 파일은 웹 쪽에서 "가져올 수 없는 파일이에요" 로 알려 줌
+            "application/sdoc", "application/sdocx", "*/*",
         )
     }
 }
