@@ -204,11 +204,13 @@ async function createNote(tpl, extra = {}) {
 
 // ---------- 가져오기 (HWP·PDF·사진 → 노트) ----------
 function importFiles() {
+  HW.link = null;
   if (host) host.importFile(); else $('fileInput').click();
 }
 $('fileInput').addEventListener('change', async (e) => {
   const files = [...e.target.files];
   e.target.value = '';
+  if (HW.link) { const n = HW.link; HW.link = null; if (files[0]) await linkOrig(n, new Uint8Array(await files[0].arrayBuffer()), files[0].name, files[0].type); return; }
   let last = null;
   for (const f of files) last = await importBytes(new Uint8Array(await f.arrayBuffer()), f.name, f.type) || last;
   if (last) openNote(last.id);
@@ -445,6 +447,7 @@ async function openNote(id) {
   $('home').hidden = true; $('editor').hidden = false;
   document.body.dataset.screen = 'editor';
   setTool('pen'); // 노트를 열면 늘 펜부터
+  $('hwpEdit').hidden = n.kind !== 'hwp';
   document.body.classList.toggle('penOnly', E.penOnly);
   $('penOnly').setAttribute('aria-pressed', String(E.penOnly));
   updateUndo();
@@ -453,6 +456,7 @@ async function openNote(id) {
 }
 async function closeNote() {
   if (!E.note) return;
+  HW.link = null;
   document.activeElement && document.activeElement.blur && document.activeElement.blur();
   await flushSave();
   pageObserver.disconnect();
@@ -571,6 +575,7 @@ onTap($('tools'), (e) => {
     toast(E.penOnly ? 'S펜으로만 써요 · 손가락은 화면을 넘겨요' : '손가락으로도 써요 · 화면 넘기기는 두 손가락');
     return;
   }
+  if (b.id === 'hwpEdit') { startHwpEdit(E.note); return; }
   if (b.dataset.tool) setTool(b.dataset.tool);
 });
 onTap($('penBar'), (e) => {
@@ -978,7 +983,24 @@ async function exportPdf(n, target) {
 }
 
 // ---------- HWP 원본 글자 고치기 (HWP 편집기를 화면 위에 띄움: hwp/index.html?embed=1) ----------
-const HW = { frame: null, note: null, applying: null };
+const HW = { frame: null, note: null, applying: null, link: null };
+/** 편집 화면의 "HWP 고치기": 원본이 있으면 바로 열고, 없으면(이 기능 전에 가져온 노트) 원본 파일을 골라 연결 */
+async function startHwpEdit(n) {
+  if (!n) return;
+  if (n.orig) { openHwpEditor(n); return; }
+  const ok = await ask({ title: '이 노트에는 원본 HWP 가 저장돼 있지 않아요 (예전에 가져온 노트). 원본 HWP 파일을 골라 연결할까요? 펜 필기는 그대로 남아요.', confirm: true });
+  if (!ok) return;
+  HW.link = n;
+  if (host) host.importFile(); else $('fileInput').click();
+}
+/** 고른 파일을 노트의 원본으로 붙이고 바로 고치기 화면을 엶 */
+async function linkOrig(n, bytes, name, mime) {
+  if (detectKind(bytes, name, mime) !== 'hwp') { toast('HWP·HWPX 파일을 골라 주세요', 4000); return; }
+  const fmt = (bytes[0] === 0x50 && bytes[1] === 0x4b) || /\.hwpx$/i.test(name || '') ? 'hwpx' : 'hwp';
+  n.orig = { blob: await putBlob(new Blob([bytes])), name: name || `${n.title || '문서'}.${fmt}`, fmt };
+  await saveNote(n);
+  openHwpEditor(n);
+}
 const HWP_MIME = { hwp: 'application/x-hwp', hwpx: 'application/hwp+zip' };
 async function delBlob(id) {
   if (!id) return;
@@ -1083,6 +1105,11 @@ window.moaApp = {
     try {
       const res = await fetch('/__doc__/current', { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (HW.link) { // "원본 HWP 연결" 로 고른 파일: 새 노트를 만들지 않고 지금 노트에 붙임
+        const n = HW.link; HW.link = null;
+        await linkOrig(n, new Uint8Array(await res.arrayBuffer()), name, mime);
+        return;
+      }
       if (E.note) await closeNote();
       note = await importBytes(new Uint8Array(await res.arrayBuffer()), name, mime);
     } catch (e) {
